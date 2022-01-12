@@ -63,9 +63,9 @@ class DepocoNetTrainer():
         """
         arch = self.config["network"]
         print(f"network architecture: {arch}")
-        self.encoder_model = network.Network(
+        self.encoder_model = network.Encoder_PointTrans(
             config['network']['encoder_blocks'])
-        self.decoder_model = network.Network(
+        self.decoder_model = network.Decoder_PointTrans(
             config['network']['decoder_blocks'])
         print(self.encoder_model)
         print(self.decoder_model)
@@ -184,20 +184,30 @@ class DepocoNetTrainer():
 
                 ####### Encoding and decoding #########
                 t1 = time.time()
-                out_dict = self.encoder_model(input_dict.copy())
-                out_dict = self.decoder_model(out_dict)
-                translation = out_dict['features'][:, :3]
-
-                samples = out_dict['points']
-                samples_transf = samples+translation
+                #print('input points shape: ', input_dict.copy()['points'].unsqueeze(0).shape)
+                xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
+                #print('after encoder points shape: ', xyz.shape)
+                #print('after encoder features shape: ', features.shape)
+                #for po, fe in xyz_and_feats:
+                #    print('[encoder] each block points shape:', po.shape)
+                #    print('[encoder] each block features shape:', fe.shape)
+                xyz, features = self.decoder_model(xyz, features, xyz_and_feats)
+                #print('after decoder points shape: ', xyz.shape)
+                #print('after decoder features shape: ', features.shape)
+                #print('after decoder input_points shape: ', input_points.shape)
+                xyz = xyz.squeeze(0)
+                features = features.squeeze(0)
+                translation = features[:, :3]
+                #print('after decoder translation shape: ', translation.shape)
+                samples = xyz
                 #####################
                 ###### Loss #########
                 #####################
                 loss = self.getTrainLoss(input_points, samples, translation)
-                loss += loss_handler.linDeconvRegularizer(
-                    self.decoder_model,
-                    weight=self.config['train']['loss_weights']['upsampling_reg'],
-                    gt_points=input_points)
+                #loss += loss_handler.linDeconvRegularizer(
+                #    self.decoder_model,
+                #    weight=self.config['train']['loss_weights']['upsampling_reg'],
+                #    gt_points=input_points)
 
                 # print(loss)
                 loss.backward()
@@ -224,7 +234,7 @@ class DepocoNetTrainer():
                                       curr_lr,
                                       r_batch)
                     if verbose:
-                        print('[%d, %5d] loss: %.5f, time: %.1f lr: %.5f' %
+                        print('[%d, %5d] loss: %.10f, time: %.4f lr: %.10f' %
                               (epoch + 1, batch, running_loss, time.time()-time_start, curr_lr))
 
                     time_start = time.time()
@@ -247,7 +257,7 @@ class DepocoNetTrainer():
                     self.saveModel(best=True)
                     best_loss = chamf_dist
                 if verbose:
-                    print('[%d, valid] rec_err: %.5f, time: %.1f' %
+                    print('[%d, valid] rec_err: %.10f, time: %.4f' %
                           (epoch + 1, chamf_dist, time.time()-ts_val))
 
                 validation_it += 1
@@ -257,7 +267,7 @@ class DepocoNetTrainer():
             if(pcu.isEveryNPercent((epoch), max_it=number_epochs, percent=10)):
                 n_pct = (epoch+1)/number_epochs*100
                 time_est = (time.time() - n_pct_time)/n_pct*(100-n_pct)
-                print("%4d%s in %ds, estim. time left: %ds (%dmin), best loss: %.5f" % (
+                print("%4d%s in %ds, estim. time left: %ds (%dmin), best loss: %.10f" % (
                     n_pct, "%", time.time() - n_pct_time, time_est, time_est/60, best_loss))
 
     def getTrainLoss(self, gt_points: torch.tensor, samples, translations,):
@@ -294,23 +304,28 @@ class DepocoNetTrainer():
                 input_dict['features'] = input_dict['features'].to(self.device)
                 input_dict['points'] = input_dict['points'].to(self.device)
                 
+                
+
                 ####### Cast to float16 if necessary #######
-                out_dict = self.encoder_model(input_dict.copy())
+                xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
+                #out_dict = self.encoder_model(input_dict.copy())
                 if self.config['evaluation']['float16']:
-                    out_dict['points'] = out_dict['points'].half().float()
-                    out_dict['features'] = out_dict['features'].half().float()
+                    xyz = xyz.half().float()
+                    features = features.half().float()
                 ####### Compute  Memory #######
                 if compute_memory:
                     nbytes = 2 if self.config['evaluation']['float16'] else 4
-                    mem = (out_dict['points'].numel() +
-                           out_dict['features'].numel())*nbytes
+                    mem = (xyz.numel() +
+                           features.numel())*nbytes
                     loss_evaluator.eval_results['memory'].append(mem)
                     loss_evaluator.eval_results['bpp'].append(
                         mem/input_dict['map'].shape[0]*8)
                 ############# Decoder ##################
-                out_dict = self.decoder_model(out_dict)
-                translation = out_dict['features'][:, :3]
-                samples = out_dict['points']
+                xyz, features = self.decoder_model(xyz, features, xyz_and_feats)
+                xyz = xyz.squeeze(0)
+                features = features.squeeze(0)
+                translation = features[:, :3]
+                samples = xyz
                 samples_transf = samples+translation
 
                 ###################################
@@ -352,15 +367,18 @@ class DepocoNetTrainer():
         input_dict['points'] = input_dict['points'].to(self.device)
 
         ####### Cast to float_16 if necessary #######
-        out_dict = self.encoder_model(input_dict.copy())
+        xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
+        #out_dict = self.encoder_model(input_dict.copy())
         if float_16:
-            out_dict['points'] = out_dict['points'].half().float()
-            out_dict['features'] = out_dict['features'].half().float()
-        nr_emb = out_dict['points'].shape
+            xyz = xyz.half().float()
+            features = features.half().float()
+        nr_emb = xyz.shape
         ############# Decoder ##################
-        out_dict = self.decoder_model(out_dict)
-        translation = out_dict['features'][:, :3]
-        samples = out_dict['points']
+        xyz, features = self.decoder_model(xyz, features, xyz_and_feats)
+        xyz = xyz.squeeze(0)
+        features = features.squeeze(0)
+        translation = features[:, :3]
+        samples = xyz
         samples_transf = samples+translation
 
         samples_transf *= scale
