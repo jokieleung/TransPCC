@@ -191,7 +191,7 @@ class DepocoNetTrainer():
                 #for po, fe in xyz_and_feats:
                 #    print('[encoder] each block points shape:', po.shape)
                 #    print('[encoder] each block features shape:', fe.shape)
-                xyz, features = self.decoder_model(xyz, features, xyz_and_feats)
+                xyz, features, intermedia_xyzs = self.decoder_model(xyz, features, xyz_and_feats)
                 #print('after decoder points shape: ', xyz.shape)
                 #print('after decoder features shape: ', features.shape)
                 #print('after decoder input_points shape: ', input_points.shape)
@@ -204,10 +204,10 @@ class DepocoNetTrainer():
                 ###### Loss #########
                 #####################
                 loss = self.getTrainLoss(input_points, samples, translation)
-                #loss += loss_handler.linDeconvRegularizer(
-                #    self.decoder_model,
-                #    weight=self.config['train']['loss_weights']['upsampling_reg'],
-                #    gt_points=input_points)
+                loss += loss_handler.PCCRegularizer(
+                    intermedia_xyzs,
+                    weight=self.config['train']['loss_weights']['upsampling_reg'],
+                    gt_points=input_points)
 
                 # print(loss)
                 loss.backward()

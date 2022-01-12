@@ -441,7 +441,7 @@ class Encoder_PointTrans(nn.Module):
         self.transformer2 = TransformerBlock(32 * 2 ** nblocks, transformer_dim, nneighbor)
         for i in range(nblocks):
             channel = 32 * 2 ** (i + 1)
-            self.transition_downs.append(TransitionDown(npoints // 4 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel]))
+            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel])) # change the value to set down-sample rate
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
         self.nblocks = nblocks
 
@@ -472,13 +472,14 @@ class Decoder_PointTrans(nn.Module):
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
 
     def forward(self, xyz, points, xyz_and_feats):
-
+        intermedia_xyzs = []
         for i in range(self.nblocks):
             points = self.transition_ups[i](xyz, points, xyz_and_feats[- i - 2][0], xyz_and_feats[- i - 2][1])
             xyz = xyz_and_feats[- i - 2][0]
             points = self.transformers[i](xyz, points)[0]
+            intermedia_xyzs.append(xyz)
 
-        return xyz, points
+        return xyz, points, intermedia_xyzs
 
 
 

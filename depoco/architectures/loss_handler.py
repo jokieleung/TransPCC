@@ -17,6 +17,18 @@ def linDeconvRegularizer(net, weight,gt_points):
                     0.5 * d_transf2map.mean())
     return weight * loss
 
+
+def PCCRegularizer(intermedia_points, weight,gt_points):
+    cham_loss = chamfer3D.dist_chamfer_3D.chamfer_3DDist()
+    loss = torch.tensor(
+            0.0, dtype=torch.float32, device=gt_points.device)  # init loss
+    for m in intermedia_points:
+        d_map2transf, d_transf2map, idx3, idx4 = cham_loss(
+                gt_points.unsqueeze(0), m)
+        loss += (0.5 * d_map2transf.mean() +
+                0.5 * d_transf2map.mean())
+    return weight * loss
+
 # From KPCONV
 def p2p_fitting_regularizer(net,deform_fitting_power=1.0,repulse_extent=1.2):
     l1 = torch.nn.L1Loss()
