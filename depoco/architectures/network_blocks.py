@@ -441,7 +441,7 @@ class Encoder_PointTrans(nn.Module):
         self.transformer2 = TransformerBlock(32 * 2 ** nblocks, transformer_dim, nneighbor)
         for i in range(nblocks):
             channel = 32 * 2 ** (i + 1)
-            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel])) # change the value to set down-sample rate
+            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel])) # change the value to set down-sample rate. Marked by Jokie
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
         self.nblocks = nblocks
 

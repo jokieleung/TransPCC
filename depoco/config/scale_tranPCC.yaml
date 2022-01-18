@@ -3,11 +3,11 @@
 ################################################################################
 train:
         #experiment_id: "transPCC_v1_lr000001"
-  experiment_id: "transPCC_v1_Adam_lr001_trainScale"
+  experiment_id: "transPCC_v1_Adam_lr001_scale"
   max_epochs: 200
   use_adam: True
   batch_size: 16 # batch size
-  max_nr_pts: 1024 # 30000 nr points
+  max_nr_pts: 9216 # 30000 nr points
   workers: 0 # number of threads to get data
   optimizer: # Adam
     weight_decay: 0.0001 # L2 penalty 
@@ -62,13 +62,13 @@ network:
     # a block needs the attributes: type, number_blocks, parameters
   encoder_blocks: # list:* indicates muliple blocks of the same type
   # cfg['num_point'], cfg['nblocks'], cfg['nneighbor'], cfg['input_dim'], cfg['transformer_dim']
-    num_point: 1024 # should be the same as max_nr_pts. marked by Jokie
+    num_point: 9216 # should be the same as max_nr_pts. marked by Jokie
     nblocks: 3
     nneighbor: 16
     input_dim: 3 # number of axis of the input points
     transformer_dim: 512
   decoder_blocks:
-    num_point: 1024 # should be the same as max_nr_pts. marked by Jokie
+    num_point: 9216 # should be the same as max_nr_pts. marked by Jokie
     nblocks: 3
     nneighbor: 16
     transformer_dim: 512

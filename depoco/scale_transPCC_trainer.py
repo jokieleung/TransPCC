@@ -21,7 +21,7 @@ import subprocess
 # import depoco.utils.checkpoint as chkpt
 import depoco.architectures.loss_handler as loss_handler
 from tqdm.auto import trange, tqdm
-
+torch.autograd.set_detect_anomaly(True)
 
 class DepocoNetTrainer():
     def __init__(self, config):
@@ -198,11 +198,12 @@ class DepocoNetTrainer():
                 input_dict['points'] = input_dict['points'].to(self.device)
                 input_dict['features'] = input_dict['features'].to(self.device)
                 input_points = input_dict['points']
+                scale = input_dict['scale'].to(self.device)
                 # print('[train] scale value:',input_dict['scale'])
 
                 ####### Encoding and decoding #########
                 t1 = time.time()
-                #print('input points shape: ', input_dict.copy()['points'].unsqueeze(0).shape)
+                # print('input points : ', input_dict.copy()['points'].unsqueeze(0))
                 xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
                 #print('after encoder points shape: ', xyz.shape)
                 #print('after encoder features shape: ', features.shape)
@@ -221,7 +222,7 @@ class DepocoNetTrainer():
                 #####################
                 ###### Loss #########
                 #####################
-                loss = self.getTrainLoss(input_points, samples, translation)
+                loss = self.getTrainLoss(input_points, samples, translation, scale)
                 loss += loss_handler.PCCRegularizer(
                     intermedia_xyzs,
                     weight=self.config['train']['loss_weights']['upsampling_reg'],
@@ -289,14 +290,21 @@ class DepocoNetTrainer():
                 print("%4d%s in %ds, estim. time left: %ds (%dmin), best loss: %.10f" % (
                     n_pct, "%", time.time() - n_pct_time, time_est, time_est/60, best_loss))
 
-    def getTrainLoss(self, gt_points: torch.tensor, samples, translations,):
+    def getTrainLoss(self, gt_points: torch.tensor, samples, translations, scale ):
         loss = torch.tensor(
             0.0, dtype=torch.float32, device=self.device)  # init loss
         samples_transf = samples + translations
+        # Scale to metric space
+        samples_tran =samples_transf * scale
+        # samples *= scale
+        # translation *= scale
+        gt_poi = gt_points* scale
 
         # Chamfer Loss between input and samples+T
         d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
-            gt_points.unsqueeze(0), samples_transf.unsqueeze(0))
+            gt_poi.unsqueeze(0), samples_tran.unsqueeze(0))
+        # d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
+        #     gt_points.unsqueeze(0), samples_transf.unsqueeze(0))
         loss += (self.w_map2transf * d_map2transf.mean() +
                  self.w_transf2map * d_transf2map.mean())
         return loss
@@ -358,6 +366,9 @@ class DepocoNetTrainer():
                 translation *= scale
                 gt_points *= scale
 
+                # print("gt_points shape, ", gt_points.shape)
+                # print("samples_transf shape, ", samples_transf.shape)
+
                 reconstruction_error = loss_evaluator.chamferDist(
                     gt_points=gt_points, source_points=samples_transf)
                 loss_evaluator.eval_results['mapwise_reconstruction_error'].append(
@@ -402,7 +413,7 @@ class DepocoNetTrainer():
         samples = xyz
         samples_transf = samples+translation
 
-        samples_transf *= scale
+        # samples_transf *= scale
         return samples_transf, nr_emb
 
 
