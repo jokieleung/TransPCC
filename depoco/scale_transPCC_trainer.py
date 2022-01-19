@@ -192,8 +192,6 @@ class DepocoNetTrainer():
                 param_group['lr'] = lr
 
             for i, input_dict in enumerate(self.submaps.getTrainSet()):
-                if i >= 10:  # drop last batch
-                    break
                 if i >= (nr_batches * batch_size):  # drop last batch
                     continue
                 ######## Preprocess #######
