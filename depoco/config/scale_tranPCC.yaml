@@ -3,11 +3,12 @@
 ################################################################################
 train:
         #experiment_id: "transPCC_v1_lr000001"
-  experiment_id: "transPCC_v1_Adam_lr001_scale"
+  experiment_id: "transPCC_v11_Adam_lr001_scale"
+  # experiment_id: "debug_eval_loss"
   max_epochs: 200
   use_adam: True
   batch_size: 16 # batch size
-  max_nr_pts: 9216 # 30000 nr points
+  max_nr_pts: 9216 # 9216 # 30000 nr points
   workers: 0 # number of threads to get data
   optimizer: # Adam
     weight_decay: 0.0001 # L2 penalty 
@@ -50,7 +51,7 @@ grid:
   normal_eigenvalue_radius: 0.5 # radius for computing normals and the eigenvalues
 
 evaluation:
-  float16: True
+  float16: True # False
   iou_grid:
     resolution: [0.2,0.2,0.1]
   f_score_dist: 0.1 # distance for being outlier

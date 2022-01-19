@@ -35,6 +35,13 @@ class Evaluator():
         loss = (d_gt2source.mean() + d_source2gt.mean())  # /2 FIXME:
         self.running_loss += loss.cpu().item()
         self.n += 1
+
+        # debug used only by Jokie 220119
+        # print('[evalution] cur stage loss: ', loss.cpu().item())
+        # print('[evalution] cur stage n: ', self.n)
+        # print('[evalution] cur self.running_loss : ', self.running_loss)
+        # print('[evalution] cur my cal loss: ', self.running_loss / self.n)
+
         return loss
 
     def evaluate(self, gt_points: torch.tensor, source_points: torch.tensor, gt_normals=None):

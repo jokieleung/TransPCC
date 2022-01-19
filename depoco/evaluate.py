@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from depoco.trainer import DepocoNetTrainer
+from depoco.scale_transPCC_trainer import DepocoNetTrainer
 from ruamel import yaml
 import argparse
 import time
