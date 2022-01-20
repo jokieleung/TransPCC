@@ -3,7 +3,7 @@
 ################################################################################
 train:
         #experiment_id: "transPCC_v1_lr000001"
-  experiment_id: "transPCC_v11_Adam_lr001_scale"
+  experiment_id: "compact_transPCC_v12_Adam_lr001_scale"
   # experiment_id: "debug_eval_loss"
   max_epochs: 200
   use_adam: True
@@ -68,11 +68,13 @@ network:
     nneighbor: 16
     input_dim: 3 # number of axis of the input points
     transformer_dim: 512
+    channel_dims: [32, 32, 32, 32]
   decoder_blocks:
     num_point: 9216 # should be the same as max_nr_pts. marked by Jokie
     nblocks: 3
     nneighbor: 16
     transformer_dim: 512
+    channel_dims: [3, 32, 32, 32]
   out_dir: "network_files/"
 
 ################################################################################

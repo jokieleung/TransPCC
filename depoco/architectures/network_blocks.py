@@ -375,8 +375,8 @@ class AdaptiveDeconv(nn.Module):
         input_dict['points'] = p_new
         input_dict['features'] = f_new
         return input_dict
-
 #------------------------------- point transformer part by Jokie 220111
+
 class TransitionDown(nn.Module):
     def __init__(self, k, nneighbor, channels):
         super().__init__()
@@ -423,26 +423,30 @@ class Encoder_PointTrans(nn.Module):
     def __init__(self, cfg: dict):
         super().__init__()
         npoints, nblocks, nneighbor, d_points, transformer_dim = cfg['num_point'], cfg['nblocks'], cfg['nneighbor'], cfg['input_dim'], cfg['transformer_dim']
+        channel_dims = cfg['channel_dims']
         self.fc1 = nn.Sequential(
-            nn.Linear(d_points, 32),
+            nn.Linear(d_points, channel_dims[0]),
             nn.ReLU(),
-            nn.Linear(32, 32)
+            nn.Linear(channel_dims[0], channel_dims[0])
         )
-        self.transformer1 = TransformerBlock(32, transformer_dim, nneighbor)
+        self.transformer1 = TransformerBlock(channel_dims[0], transformer_dim, nneighbor)
         self.transition_downs = nn.ModuleList()
         self.transformers = nn.ModuleList()
+
+        # mapped (using an MLP) to the compact embedding space to enable a memory-efficient representation
         self.fc2 = nn.Sequential(
-            nn.Linear(32 * 2 ** nblocks, 512),
+            nn.Linear(channel_dims[-1], channel_dims[-1]),
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(channel_dims[-1], channel_dims[-1]),
             nn.ReLU(),
-            nn.Linear(512, 32 * 2 ** nblocks)
+            nn.Linear(channel_dims[-1], 3)
         )
-        self.transformer2 = TransformerBlock(32 * 2 ** nblocks, transformer_dim, nneighbor)
+        
         for i in range(nblocks):
-            channel = 32 * 2 ** (i + 1)
-            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel])) # change the value to set down-sample rate. Marked by Jokie
+            channel = channel_dims[i+1]
+            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel_dims[i] + 3, channel, channel])) # change the value after '//' to set down-sample rate. Marked by Jokie, e.g., 2 for 1/2 down-sample
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
+
         self.nblocks = nblocks
 
     def forward(self, x):
@@ -455,20 +459,22 @@ class Encoder_PointTrans(nn.Module):
             points = self.transformers[i](xyz, points)[0]
             xyz_and_feats.append((xyz, points))
         xyz = xyz_and_feats[-1][0]
-        points = self.transformer2(xyz, self.fc2(points))[0]
+        points = self.fc2(points)
         return xyz, points, xyz_and_feats
 
 class Decoder_PointTrans(nn.Module):
     def __init__(self, cfg: dict):
         super().__init__()
         npoints, nblocks, nneighbor, transformer_dim = cfg['num_point'], cfg['nblocks'], cfg['nneighbor'], cfg['transformer_dim']
-        #npoints, nblocks, nneighbor, n_c, d_points = cfg.num_point, cfg.model.nblocks, cfg.model.nneighbor, cfg.num_class, cfg.input_dim
+        channel_dims = cfg['channel_dims']
         self.nblocks = nblocks
         self.transition_ups = nn.ModuleList()
         self.transformers = nn.ModuleList()
-        for i in reversed(range(nblocks)):
-            channel = 32 * 2 ** i
-            self.transition_ups.append(TransitionUp(channel * 2, channel, channel))
+
+        for i in range(nblocks):
+            channel_in = channel_dims[i]
+            channel = channel_dims[i+1]
+            self.transition_ups.append(TransitionUp(channel_in, channel, channel))
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
 
     def forward(self, xyz, points, xyz_and_feats):

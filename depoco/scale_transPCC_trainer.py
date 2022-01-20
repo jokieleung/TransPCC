@@ -347,7 +347,7 @@ class DepocoNetTrainer():
                  load_model=False,
                  best_model=False,
                  reference_points='points',
-                 compute_memory=False,
+                 compute_memory=True, # original: False 
                  evaluate=True): # original: False 
         loss_evaluator = evaluator.Evaluator(self.config)
         self.encoder_model.eval()
@@ -421,11 +421,6 @@ class DepocoNetTrainer():
                     gt_points=gt_pts, source_points=samples_tran)
                 loss_evaluator.eval_results['mapwise_reconstruction_error'].append(
                     reconstruction_error.item())
-
-                # reconstruction_error = self.getValidLoss(
-                #     gt_pts, samples_tran)
-                # running_eval_loss += reconstruction_error.item()
-                # cur_n +=1
 
                 # debug used only by Jokie 220119
                 # print('[evalution] gt self loss: ', self.getValidLoss(gt_points, gt_points))
