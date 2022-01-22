@@ -10,6 +10,7 @@ def plotResults(files, x_key, y_key, ax, draw_line=False, label=None, set_lim=Tr
     y = []
     for f in files:
         eval_dict = pcu.load_obj(f)
+        
         if((x_key in eval_dict.keys()) & (y_key in eval_dict.keys())):
             for v in eval_dict.values():
                 v = np.array(v)
@@ -19,8 +20,13 @@ def plotResults(files, x_key, y_key, ax, draw_line=False, label=None, set_lim=Tr
                 ax.text(np.mean(eval_dict[x_key]), np.mean(
                     eval_dict[y_key]), f.split('/')[-1][:-4])
 
+            # print('x key',eval_dict[x_key])
+            # print('y key',eval_dict[y_key])
+
             x.append(np.mean(eval_dict[x_key]))
             y.append(np.mean(eval_dict[y_key]))
+            # print(y_key, np.mean(eval_dict[y_key]))
+            
 
     if draw_line:
         line, = ax.plot(x, y, '-x', label=label)

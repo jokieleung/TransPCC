@@ -435,11 +435,11 @@ class Encoder_PointTrans(nn.Module):
 
         # mapped (using an MLP) to the compact embedding space to enable a memory-efficient representation
         self.fc2 = nn.Sequential(
-            nn.Linear(channel_dims[-1], channel_dims[-1]),
+            nn.Linear(channel_dims[-2], channel_dims[-2]),
             nn.ReLU(),
-            nn.Linear(channel_dims[-1], channel_dims[-1]),
+            nn.Linear(channel_dims[-2], channel_dims[-2]),
             nn.ReLU(),
-            nn.Linear(channel_dims[-1], 3)
+            nn.Linear(channel_dims[-2], channel_dims[-1])
         )
         
         for i in range(nblocks):

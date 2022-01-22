@@ -31,6 +31,7 @@ class DepocoNetTrainer():
             ['git', 'rev-parse', '--short', 'HEAD']).strip())
         self.config = config
         self.experiment_id = self.config["train"]["experiment_id"]
+        # self.load_experiment_id = self.config["train"]["load_experiment_id"]
         # self.submaps = submap_handler.SubmapHandler(self.config)
         t_sm = time.time()
         self.submaps = submap_handler.SubMapParser(config)
@@ -75,6 +76,8 @@ class DepocoNetTrainer():
             out_dir = self.config["network"]['out_dir']
         enc_path = out_dir+self.experiment_id+'/enc'
         dec_path = out_dir+self.experiment_id+'/dec'
+        # enc_path = out_dir+self.load_experiment_id+'/enc'
+        # dec_path = out_dir+self.load_experiment_id+'/dec'
         enc_path += '_best.pth' if best else '.pth'
         dec_path += '_best.pth' if best else '.pth'
         print("load", enc_path, ",", dec_path)
@@ -192,6 +195,8 @@ class DepocoNetTrainer():
                 param_group['lr'] = lr
 
             for i, input_dict in enumerate(self.submaps.getTrainSet()):
+                # if i >= 5:  # debug evaluation
+                #     break
                 if i >= (nr_batches * batch_size):  # drop last batch
                     continue
                 ######## Preprocess #######
@@ -392,6 +397,12 @@ class DepocoNetTrainer():
                 xyz, features, intermedia_xyzs = self.decoder_model(xyz, features, xyz_and_feats)
                 xyz = xyz.squeeze(0)
                 features = features.squeeze(0)
+                # Computer the decoder memory 
+                nbytes = 2 if self.config['evaluation']['float16'] else 4
+                mem = (xyz.numel() +
+                        features.numel())*nbytes
+                loss_evaluator.eval_results['decoder_memory'].append(mem)
+
                 translation = features[:, :3]
                 samples = xyz
                 samples_transf = samples+translation
@@ -447,7 +458,13 @@ class DepocoNetTrainer():
 
 
             loss_evaluator.eval_results['reconstruction_error'] = chamfer_dist
-            print('loss_evaluator.eval_results: ', loss_evaluator.eval_results)
+            # print('loss_evaluator.eval_results: ', loss_evaluator.eval_results)
+            print('mean bpp : ', np.mean(loss_evaluator.eval_results['bpp']))
+            print('mean encoder memory (bytes): ', np.mean(loss_evaluator.eval_results['memory']))
+            print('mean decoder memory (bytes): ', np.mean(loss_evaluator.eval_results['decoder_memory']))
+            print('mean chamfer_dist_abs: ', np.mean(loss_evaluator.eval_results['chamfer_dist_abs']))
+            print('mean chamfer_dist_plane: ', np.mean(loss_evaluator.eval_results['chamfer_dist_plane']))
+            print('mean iou: ', np.mean(loss_evaluator.eval_results['iou']))
         self.encoder_model.train()
         self.decoder_model.train()
 
