@@ -393,6 +393,8 @@ class DepocoNetTrainer():
                     loss_evaluator.eval_results['memory'].append(mem)
                     loss_evaluator.eval_results['bpp'].append(
                         mem/input_dict['map'].shape[0]*8)
+                    # print('mem ',loss_evaluator.eval_results['memory'])
+                    # print('bpp ',loss_evaluator.eval_results['bpp'])
                 ############# Decoder ##################
                 xyz, features, intermedia_xyzs = self.decoder_model(xyz, features, xyz_and_feats)
                 xyz = xyz.squeeze(0)

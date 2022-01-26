@@ -416,7 +416,11 @@ class TransitionUp(nn.Module):
         feats1 = self.fc1(points1)
         feats2 = self.fc2(points2)
         feats1 = self.fp(xyz2.transpose(1, 2), xyz1.transpose(1, 2), None, feats1.transpose(1, 2)).transpose(1, 2)
-        return feats1 + feats2
+        
+        # romove the skip connection by Jokie 220123
+        return feats1 
+        # skip connection
+        # return feats1 + feats2
 
 
 class Encoder_PointTrans(nn.Module):
@@ -424,6 +428,7 @@ class Encoder_PointTrans(nn.Module):
         super().__init__()
         npoints, nblocks, nneighbor, d_points, transformer_dim = cfg['num_point'], cfg['nblocks'], cfg['nneighbor'], cfg['input_dim'], cfg['transformer_dim']
         channel_dims = cfg['channel_dims']
+        down_sample_rate = cfg['down_sample_rate']
         self.fc1 = nn.Sequential(
             nn.Linear(d_points, channel_dims[0]),
             nn.ReLU(),
@@ -444,7 +449,7 @@ class Encoder_PointTrans(nn.Module):
         
         for i in range(nblocks):
             channel = channel_dims[i+1]
-            self.transition_downs.append(TransitionDown(npoints // 2 ** (i + 1), nneighbor, [channel_dims[i] + 3, channel, channel])) # change the value after '//' to set down-sample rate. Marked by Jokie, e.g., 2 for 1/2 down-sample
+            self.transition_downs.append(TransitionDown(npoints // down_sample_rate ** (i + 1), nneighbor, [channel_dims[i] + 3, channel, channel])) # change the value after '//' to set down-sample rate. Marked by Jokie, e.g., 2 for 1/2 down-sample
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
 
         self.nblocks = nblocks
