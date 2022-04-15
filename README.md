@@ -1,4 +1,4 @@
-# TransPCC
+# TransPCC: Towards Deep Point Cloud Compression via Transformers
 
 This repository implements the algorithms described in our paper [TransPCC: Towards Deep Point Cloud Compression via Transformers](https://jokieleung.github.io/attaches/TransPCC_ICMR22.pdf).
 
