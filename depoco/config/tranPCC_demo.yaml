@@ -2,7 +2,7 @@
 # training parameters
 ################################################################################
 train:
-  experiment_id: "downsample3_transPCC_v12_Adam_lr001_scale_bpp01"
+  experiment_id: "transPCC_v12"
   max_epochs: 200
   use_adam: True
   batch_size: 16 # batch size
@@ -19,7 +19,7 @@ train:
     step_size: 20
     lr_decay: 0.5
   nr_submaps: 0 # nr of maps using for training, 0 for using all maps
-  load_pretrained: True # False # False
+  load_pretrained: False # False
   sampling_method: "random" # 'ordered' or 'random'
   map_prob_rate: -1 # every x epochs computes the loss for each train map and sets those as sample distribution, -1 for no update
   loss_weights:
@@ -66,9 +66,8 @@ network:
     nneighbor: 16
     input_dim: 3 # number of axis of the input points
     transformer_dim: 512
-    down_sample_rate: 3 # change the value set down-sample rate. Marked by Jokie, e.g., 2 for 1/2 down-sample
+    down_sample_rate: 2 # change the value set down-sample rate. Marked by Jokie, e.g., 2 for 1/2 down-sample
     channel_dims: [32, 32, 32, 32, 3]
-    # channel_dims: [32, 32, 32, 32, 3]
   decoder_blocks:
     num_point: 9216 # should be the same as max_nr_pts. marked by Jokie
     nblocks: 3

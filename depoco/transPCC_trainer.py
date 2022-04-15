@@ -21,7 +21,7 @@ import subprocess
 # import depoco.utils.checkpoint as chkpt
 import depoco.architectures.loss_handler as loss_handler
 from tqdm.auto import trange, tqdm
-
+torch.autograd.set_detect_anomaly(True)
 
 class DepocoNetTrainer():
     def __init__(self, config):
@@ -31,6 +31,7 @@ class DepocoNetTrainer():
             ['git', 'rev-parse', '--short', 'HEAD']).strip())
         self.config = config
         self.experiment_id = self.config["train"]["experiment_id"]
+        # self.load_experiment_id = self.config["train"]["load_experiment_id"]
         # self.submaps = submap_handler.SubmapHandler(self.config)
         t_sm = time.time()
         self.submaps = submap_handler.SubMapParser(config)
@@ -75,6 +76,8 @@ class DepocoNetTrainer():
             out_dir = self.config["network"]['out_dir']
         enc_path = out_dir+self.experiment_id+'/enc'
         dec_path = out_dir+self.experiment_id+'/dec'
+        # enc_path = out_dir+self.load_experiment_id+'/enc'
+        # dec_path = out_dir+self.load_experiment_id+'/dec'
         enc_path += '_best.pth' if best else '.pth'
         dec_path += '_best.pth' if best else '.pth'
         print("load", enc_path, ",", dec_path)
@@ -159,7 +162,7 @@ class DepocoNetTrainer():
         scheduler = self.getScheduler(
             optimizer, self.submaps.getTrainSize(), batch_size)
 
-        # # learning strategy 2 : SGD
+        # # learning strategy 2 : SGD , still have a NAN problem marked by Jokie 220119
         # optimizer = optim.SGD(self.getNetworkParams(), lr=lr, momentum=self.config["train"]["optimizer"]["momentum"],weight_decay=self.config["train"]["optimizer"]["weight_decay"])
         # scheduler = optim.lr_scheduler.MultiStepLR(
         #     optimizer, milestones=[int(number_epochs*0.6), int(number_epochs*0.8)], gamma=0.1)
@@ -192,17 +195,20 @@ class DepocoNetTrainer():
                 param_group['lr'] = lr
 
             for i, input_dict in enumerate(self.submaps.getTrainSet()):
+                # if i >= 5:  # debug evaluation
+                #     break
                 if i >= (nr_batches * batch_size):  # drop last batch
                     continue
                 ######## Preprocess #######
                 input_dict['points'] = input_dict['points'].to(self.device)
                 input_dict['features'] = input_dict['features'].to(self.device)
                 input_points = input_dict['points']
+                scale = input_dict['scale'].to(self.device)
                 # print('[train] scale value:',input_dict['scale'])
 
                 ####### Encoding and decoding #########
                 t1 = time.time()
-                #print('input points shape: ', input_dict.copy()['points'].unsqueeze(0).shape)
+                # print('input points : ', input_dict.copy()['points'].unsqueeze(0))
                 xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
                 #print('after encoder points shape: ', xyz.shape)
                 #print('after encoder features shape: ', features.shape)
@@ -221,7 +227,8 @@ class DepocoNetTrainer():
                 #####################
                 ###### Loss #########
                 #####################
-                loss = self.getTrainLoss(input_points, samples, translation)
+                # print('[Train] Scale: ', scale)
+                loss = self.getTrainLoss(input_points, samples, translation, scale)
                 loss += loss_handler.PCCRegularizer(
                     intermedia_xyzs,
                     weight=self.config['train']['loss_weights']['upsampling_reg'],
@@ -234,11 +241,13 @@ class DepocoNetTrainer():
                 ######### Gradient Accumulation ########
                 ########################################
                 if ((i % batch_size) == (batch_size-1)):
+                    # print('[Training] cur i: ' , i)
                     r_batch += 1
                     batch += 1
                     optimizer.step()
 
                     optimizer.zero_grad()
+                    # print('[Training] total running loss: ' , running_loss)
                     running_loss /= batch_size
 
                     # comment when not using the oneCycleSchedulerLR by Jokie 220118
@@ -268,7 +277,9 @@ class DepocoNetTrainer():
                 ts_val = time.time()
                 valid_dict = self.evaluate(
                     dataloader=self.submaps.getValidSet())
+                    # dataloader=self.submaps.getValidSet())
                 chamf_dist = valid_dict['reconstruction_error']
+                
                 writer.add_scalar('v: chamfer distance',
                                   chamf_dist,
                                   r_batch)
@@ -289,14 +300,50 @@ class DepocoNetTrainer():
                 print("%4d%s in %ds, estim. time left: %ds (%dmin), best loss: %.10f" % (
                     n_pct, "%", time.time() - n_pct_time, time_est, time_est/60, best_loss))
 
-    def getTrainLoss(self, gt_points: torch.tensor, samples, translations,):
+    def getTrainLoss(self, gt_points: torch.tensor, samples, translations, scale ):
         loss = torch.tensor(
             0.0, dtype=torch.float32, device=self.device)  # init loss
         samples_transf = samples + translations
 
+        # print("[train]before scale samples_transf, ", samples_transf)
+        # print("[train]before scale gt_points, ", gt_points)
+
+        # Scale to metric space
+        samples_tran =samples_transf * scale
+        gt_poi = gt_points* scale
+
+        # print("[train]after scale samples_transf, ", samples_tran)
+        # print("[train]after scale gt_points, ", gt_poi)
+        
+
+        # print("[train]gt_points shape, ", gt_poi.shape)
+        # print("[train]samples_transf shape, ", samples_tran.shape)
+
         # Chamfer Loss between input and samples+T
         d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
-            gt_points.unsqueeze(0), samples_transf.unsqueeze(0))
+            gt_poi.unsqueeze(0), samples_tran.unsqueeze(0))
+        # d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
+        #     gt_points.unsqueeze(0), samples_transf.unsqueeze(0))
+        loss += (self.w_map2transf * d_map2transf.mean() +
+                 self.w_transf2map * d_transf2map.mean())
+        return loss
+
+    def getValidLoss(self, gt_points: torch.tensor, samples, ):
+        loss = torch.tensor(
+            0.0, dtype=torch.float32, device=self.device)  # init loss
+        # samples_transf = samples + translations
+
+        # # Scale to metric space
+        # samples_tran =samples_transf * scale
+        # # samples *= scale
+        # # translation *= scale
+        # gt_poi = gt_points* scale
+
+        # Chamfer Loss between input and samples+T
+        d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
+            gt_points.unsqueeze(0), samples.unsqueeze(0))
+        # d_map2transf, d_transf2map, idx3, idx4 = self.cham_loss(
+        #     gt_points.unsqueeze(0), samples_transf.unsqueeze(0))
         loss += (self.w_map2transf * d_map2transf.mean() +
                  self.w_transf2map * d_transf2map.mean())
         return loss
@@ -305,11 +352,15 @@ class DepocoNetTrainer():
                  load_model=False,
                  best_model=False,
                  reference_points='points',
-                 compute_memory=False,
-                 evaluate=False):
+                 compute_memory=True, # original: False 
+                 evaluate=True): # original: False 
         loss_evaluator = evaluator.Evaluator(self.config)
         self.encoder_model.eval()
         self.decoder_model.eval()
+
+        cur_n = 0
+        running_eval_loss = 0
+
         with torch.no_grad():
             if load_model:
                 self.loadModel(best=best_model)
@@ -319,14 +370,15 @@ class DepocoNetTrainer():
             for i, input_dict in enumerate(tqdm(dataloader)):
                 map_idx = input_dict['idx']
                 # print('map:', map_idx)
-                scale = input_dict['scale']
+                scale = input_dict['scale'].to(self.device)
                 # print('[evaluation] scale shape', scale.shape)
                 # print('[evaluation] scale', scale)
                 input_dict['features'] = input_dict['features'].to(self.device)
                 input_dict['points'] = input_dict['points'].to(self.device)
                 
                 
-
+                # print('[Evaluation] input points: ', input_dict.copy()['points'])
+                # print('[Evaluation] input points shape: ', input_dict.copy()['points'].shape)
                 ####### Cast to float16 if necessary #######
                 xyz, features, xyz_and_feats = self.encoder_model(input_dict.copy()['points'].unsqueeze(0))
                 #out_dict = self.encoder_model(input_dict.copy())
@@ -341,10 +393,18 @@ class DepocoNetTrainer():
                     loss_evaluator.eval_results['memory'].append(mem)
                     loss_evaluator.eval_results['bpp'].append(
                         mem/input_dict['map'].shape[0]*8)
+                    # print('mem ',loss_evaluator.eval_results['memory'])
+                    # print('bpp ',loss_evaluator.eval_results['bpp'])
                 ############# Decoder ##################
                 xyz, features, intermedia_xyzs = self.decoder_model(xyz, features, xyz_and_feats)
                 xyz = xyz.squeeze(0)
                 features = features.squeeze(0)
+                # Computer the decoder memory 
+                nbytes = 2 if self.config['evaluation']['float16'] else 4
+                mem = (xyz.numel() +
+                        features.numel())*nbytes
+                loss_evaluator.eval_results['decoder_memory'].append(mem)
+
                 translation = features[:, :3]
                 samples = xyz
                 samples_transf = samples+translation
@@ -352,16 +412,35 @@ class DepocoNetTrainer():
                 ###################################
                 gt_points = input_dict[reference_points].to(self.device)
 
-                # Scale to metric space
-                samples_transf *= scale
-                samples *= scale
-                translation *= scale
-                gt_points *= scale
+                # print('[Evaluation] gt_points: ', gt_points)
+                # print('[Evaluation] samples_transf: ', samples_transf)
+                # print('[Evaluation] gt_points shape: ', gt_points.shape)
+
+                # Scale to metric space having bug: will product scale value 2times. Find in 220119 by Jokie
+                # samples_transf *= scale
+                # samples *= scale
+                # translation *= scale
+                # gt_points *= scale
+
+                # Scale to metric space without self quoting
+                samples_tran = samples_transf * scale
+                gt_pts = gt_points * scale
+
+                # print('[Evaluation] Scale: ', scale)
+                # print('[Evaluation] Scaled gt_points: ', gt_pts)
+                # print('[Evaluation] Scaled samples_transf: ', samples_tran)
 
                 reconstruction_error = loss_evaluator.chamferDist(
-                    gt_points=gt_points, source_points=samples_transf)
+                    gt_points=gt_pts, source_points=samples_tran)
                 loss_evaluator.eval_results['mapwise_reconstruction_error'].append(
                     reconstruction_error.item())
+
+                # debug used only by Jokie 220119
+                # print('[evalution] gt self loss: ', self.getValidLoss(gt_points, gt_points))
+                # print('[evalution] cur stage loss: ', reconstruction_error.item())
+                # print('[evalution] cur stage n: ', cur_n)
+                # print('[evalution] cur self.running_loss : ', running_eval_loss)
+                # print('[evalution] cur my cal loss: ', running_eval_loss / cur_n)
 
                 if evaluate:  # Full evaluation for testing
                     feat_ind = np.cumsum(
@@ -373,8 +452,21 @@ class DepocoNetTrainer():
                                             '_attributes'][:, normal_idx[0]:normal_idx[1]].cuda()
                     loss_evaluator.evaluate(
                         gt_points=gt_points, source_points=samples_transf, gt_normals=gt_normals)
+
             chamfer_dist = loss_evaluator.getRunningLoss()
+            # chamfer_dist = running_eval_loss / cur_n
+            # running_eval_loss = 0
+            # cur_n = 0
+
+
             loss_evaluator.eval_results['reconstruction_error'] = chamfer_dist
+            # print('loss_evaluator.eval_results: ', loss_evaluator.eval_results)
+            print('mean bpp : ', np.mean(loss_evaluator.eval_results['bpp']))
+            print('mean encoder memory (bytes): ', np.mean(loss_evaluator.eval_results['memory']))
+            print('mean decoder memory (bytes): ', np.mean(loss_evaluator.eval_results['decoder_memory']))
+            print('mean chamfer_dist_abs: ', np.mean(loss_evaluator.eval_results['chamfer_dist_abs']))
+            print('mean chamfer_dist_plane: ', np.mean(loss_evaluator.eval_results['chamfer_dist_plane']))
+            print('mean iou: ', np.mean(loss_evaluator.eval_results['iou']))
         self.encoder_model.train()
         self.decoder_model.train()
 
@@ -402,8 +494,8 @@ class DepocoNetTrainer():
         samples = xyz
         samples_transf = samples+translation
 
-        samples_transf *= scale
-        return samples_transf, nr_emb
+        samples_trans =  samples_transf * scale
+        return samples_trans, nr_emb
 
 
 if __name__ == "__main__":

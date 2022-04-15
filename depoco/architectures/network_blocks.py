@@ -417,10 +417,7 @@ class TransitionUp(nn.Module):
         feats2 = self.fc2(points2)
         feats1 = self.fp(xyz2.transpose(1, 2), xyz1.transpose(1, 2), None, feats1.transpose(1, 2)).transpose(1, 2)
         
-        # romove the skip connection by Jokie 220123
         return feats1 
-        # skip connection
-        # return feats1 + feats2
 
 
 class Encoder_PointTrans(nn.Module):
